@@ -34,6 +34,12 @@ import java.util.Objects;
  */
 public final class JsonPrimitive extends JsonElement {
 
+  /** Null object hash code. */
+  private static final int NULL_HASH_CODE = 31;
+
+  /** Number of bits to shift a long value for hashing. */
+  private static final int LONG_SHIFT_BITS = 32;
+
   private final Object value;
 
   /**
@@ -260,16 +266,16 @@ public final class JsonPrimitive extends JsonElement {
   @Override
   public int hashCode() {
     if (value == null) {
-      return 31;
+      return NULL_HASH_CODE;
     }
     // Using recommended hashing algorithm from Effective Java for longs and doubles
     if (isIntegral(this)) {
       long value = getAsNumber().longValue();
-      return (int) (value ^ (value >>> 32));
+      return (int) (value ^ (value >>> LONG_SHIFT_BITS));
     }
     if (value instanceof Number) {
       long value = Double.doubleToLongBits(getAsNumber().doubleValue());
-      return (int) (value ^ (value >>> 32));
+      return (int) (value ^ (value >>> LONG_SHIFT_BITS));
     }
     return value.hashCode();
   }
