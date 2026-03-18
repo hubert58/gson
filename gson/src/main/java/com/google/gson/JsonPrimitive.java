@@ -71,8 +71,8 @@ public final class JsonPrimitive extends JsonElement {
    * @param string the value to create the primitive with.
    */
   @SuppressWarnings("deprecation") // superclass constructor
-  public JsonPrimitive(String string) {
-    value = Objects.requireNonNull(string);
+  public JsonPrimitive(String stringValue) {
+    value = Objects.requireNonNull(stringValue);
   }
 
   /**
@@ -198,7 +198,7 @@ public final class JsonPrimitive extends JsonElement {
   public BigInteger getAsBigInteger() {
     return value instanceof BigInteger
         ? (BigInteger) value
-        : isIntegral(this)
+        : this.isIntegral()
             ? BigInteger.valueOf(this.getAsNumber().longValue())
             : NumberLimits.parseBigInteger(this.getAsString());
   }
@@ -269,7 +269,7 @@ public final class JsonPrimitive extends JsonElement {
       return NULL_HASH_CODE;
     }
     // Using recommended hashing algorithm from Effective Java for longs and doubles
-    if (isIntegral(this)) {
+    if (this.isIntegral()) {
       long value = getAsNumber().longValue();
       return (int) (value ^ (value >>> LONG_SHIFT_BITS));
     }
@@ -296,7 +296,7 @@ public final class JsonPrimitive extends JsonElement {
     if (value == null) {
       return other.value == null;
     }
-    if (isIntegral(this) && isIntegral(other)) {
+    if (this.isIntegral() && other.isIntegral()) {
       return (this.value instanceof BigInteger || other.value instanceof BigInteger)
           ? this.getAsBigInteger().equals(other.getAsBigInteger())
           : this.getAsNumber().longValue() == other.getAsNumber().longValue();
@@ -320,9 +320,9 @@ public final class JsonPrimitive extends JsonElement {
    * Returns true if the specified number is an integral type (Long, Integer, Short, Byte,
    * BigInteger)
    */
-  private static boolean isIntegral(JsonPrimitive primitive) {
-    if (primitive.value instanceof Number) {
-      Number number = (Number) primitive.value;
+  private boolean isIntegral() {
+    if (this.value instanceof Number) {
+      Number number = (Number) this.value;
       return number instanceof BigInteger
           || number instanceof Long
           || number instanceof Integer
