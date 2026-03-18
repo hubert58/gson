@@ -23,7 +23,6 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.internal.bind.JsonElementTypeAdapter;
 import com.google.gson.stream.JsonReader;
-import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
 import com.google.gson.stream.MalformedJsonException;
 import java.io.Closeable;
@@ -43,7 +42,7 @@ public final class Streams {
   public static JsonElement parse(JsonReader reader) throws JsonParseException {
     boolean isEmpty = true;
     try {
-      JsonToken unused = reader.peek();
+      reader.peek();
       isEmpty = false;
       return JsonElementTypeAdapter.ADAPTER.read(reader);
     } catch (EOFException e) {
