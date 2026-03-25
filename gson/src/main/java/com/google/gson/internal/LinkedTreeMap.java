@@ -57,6 +57,12 @@ public final class LinkedTreeMap<K, V> extends AbstractMap<K, V> implements Seri
   int size = 0;
   int modCount = 0;
 
+  private static final int BALANCED = 0;
+  private static final int LEFT_HEAVY = 2;
+  private static final int RIGHT_HEAVY = -2;
+  private static final int LEFT_LEANING = 1;
+  private static final int RIGHT_LEANING = -1;
+
   // Used to preserve iteration order
   final Node<K, V> header;
 
@@ -228,9 +234,9 @@ public final class LinkedTreeMap<K, V> extends AbstractMap<K, V> implements Seri
    * {@code remove()} and {@code contains()} will violate the collections API.
    */
   Node<K, V> findByEntry(Entry<?, ?> entry) {
-    Node<K, V> mine = findByObject(entry.getKey());
-    boolean valuesEqual = mine != null && equal(mine.value, entry.getValue());
-    return valuesEqual ? mine : null;
+    Node<K, V> foundNode = findByObject(entry.getKey());
+    boolean valuesEqual = foundNode != null && equal(foundNode.value, entry.getValue());
+    return valuesEqual ? foundNode : null;
   }
 
   private static boolean equal(Object a, Object b) {
@@ -342,18 +348,18 @@ public final class LinkedTreeMap<K, V> extends AbstractMap<K, V> implements Seri
       int leftHeight = left != null ? left.height : 0;
       int rightHeight = right != null ? right.height : 0;
 
-      int delta = leftHeight - rightHeight;
-      if (delta == -2) {
+      int balanceFactor = leftHeight - rightHeight;
+      if (balanceFactor == RIGHT_HEAVY) {
         Node<K, V> rightLeft = right.left;
         Node<K, V> rightRight = right.right;
         int rightRightHeight = rightRight != null ? rightRight.height : 0;
         int rightLeftHeight = rightLeft != null ? rightLeft.height : 0;
 
         int rightDelta = rightLeftHeight - rightRightHeight;
-        if (rightDelta == -1 || (rightDelta == 0 && !insert)) {
+        if (rightDelta == RIGHT_LEANING || (rightDelta == BALANCED && !insert)) {
           rotateLeft(node); // AVL right right
         } else {
-          assert (rightDelta == 1);
+          assert (rightDelta == LEFT_LEANING);
           rotateRight(right); // AVL right left
           rotateLeft(node);
         }
@@ -361,17 +367,17 @@ public final class LinkedTreeMap<K, V> extends AbstractMap<K, V> implements Seri
           break; // no further rotations will be necessary
         }
 
-      } else if (delta == 2) {
+      } else if (balanceFactor == LEFT_HEAVY) {
         Node<K, V> leftLeft = left.left;
         Node<K, V> leftRight = left.right;
         int leftRightHeight = leftRight != null ? leftRight.height : 0;
         int leftLeftHeight = leftLeft != null ? leftLeft.height : 0;
 
         int leftDelta = leftLeftHeight - leftRightHeight;
-        if (leftDelta == 1 || (leftDelta == 0 && !insert)) {
+        if (leftDelta == LEFT_LEANING || (leftDelta == BALANCED && !insert)) {
           rotateRight(node); // AVL left left
         } else {
-          assert (leftDelta == -1);
+          assert (leftDelta == RIGHT_LEANING);
           rotateLeft(left); // AVL left right
           rotateRight(node);
         }
@@ -379,14 +385,14 @@ public final class LinkedTreeMap<K, V> extends AbstractMap<K, V> implements Seri
           break; // no further rotations will be necessary
         }
 
-      } else if (delta == 0) {
+      } else if (balanceFactor == BALANCED) {
         node.height = leftHeight + 1; // leftHeight == rightHeight
         if (insert) {
           break; // the insert caused balance, so rebalancing is done!
         }
 
       } else {
-        assert (delta == -1 || delta == 1);
+        assert (balanceFactor == RIGHT_LEANING || balanceFactor == LEFT_LEANING);
         node.height = Math.max(leftHeight, rightHeight) + 1;
         if (!insert) {
           break; // the height hasn't changed, so rebalancing is done!

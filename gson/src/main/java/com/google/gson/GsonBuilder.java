@@ -702,7 +702,7 @@ public final class GsonBuilder {
 
   private static int checkDateFormatStyle(int style) {
     // Valid DateFormat styles are: 0, 1, 2, 3 (FULL, LONG, MEDIUM, SHORT)
-    if (style < 0 || style > 3) {
+    if (style < DateFormat.FULL || style > DateFormat.SHORT) {
       throw new IllegalArgumentException("Invalid style: " + style);
     }
     return style;

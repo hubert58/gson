@@ -40,6 +40,8 @@ import java.util.List;
  * @author Joel Leitch
  */
 public final class JsonArray extends JsonElement implements Iterable<JsonElement> {
+  private static final int EXPECTED_SINGLE_ELEMENT_SIZE = 1;
+
   private final ArrayList<JsonElement> elements;
 
   /** Creates an empty JsonArray. */
@@ -232,13 +234,6 @@ public final class JsonArray extends JsonElement implements Iterable<JsonElement
     return elements.get(i);
   }
 
-  private JsonElement getAsSingleElement() {
-    int size = elements.size();
-    if (size == 1) {
-      return elements.get(0);
-    }
-    throw new IllegalStateException("Array must have size 1, but has size " + size);
-  }
 
   /**
    * Convenience method to get this array as a {@link Number} if it contains a single element. This
@@ -432,5 +427,14 @@ public final class JsonArray extends JsonElement implements Iterable<JsonElement
   @Override
   public int hashCode() {
     return elements.hashCode();
+  }
+
+  private JsonElement getAsSingleElement() {
+    int size = elements.size();
+    if (size == EXPECTED_SINGLE_ELEMENT_SIZE) {
+      return elements.get(0);
+    }
+    throw new IllegalStateException(
+        "Array must have size " + EXPECTED_SINGLE_ELEMENT_SIZE + ", but has size " + size);
   }
 }
