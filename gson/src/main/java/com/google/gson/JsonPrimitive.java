@@ -68,7 +68,7 @@ public final class JsonPrimitive extends JsonElement {
   /**
    * Create a primitive containing a String value.
    *
-   * @param string the value to create the primitive with.
+   * @param stringValue the value to create the primitive with.
    */
   @SuppressWarnings("deprecation") // superclass constructor
   public JsonPrimitive(String stringValue) {
@@ -79,16 +79,16 @@ public final class JsonPrimitive extends JsonElement {
    * Create a primitive containing a character. The character is turned into a one character String
    * since JSON only supports String.
    *
-   * @param c the value to create the primitive with.
+   * @param character the value to create the primitive with.
    */
   // "deprecation" suppression for superclass constructor
   // "UnnecessaryBoxedVariable" Error Prone warning is correct since method does not accept
   // null, but cannot be changed anymore since this is public API
   @SuppressWarnings({"deprecation", "UnnecessaryBoxedVariable"})
-  public JsonPrimitive(Character c) {
+  public JsonPrimitive(Character character) {
     // convert characters to strings since in JSON, characters are represented as a single
     // character string
-    value = Objects.requireNonNull(c).toString();
+    value = Objects.requireNonNull(character).toString();
   }
 
   /**
@@ -254,11 +254,11 @@ public final class JsonPrimitive extends JsonElement {
   @Deprecated
   @Override
   public char getAsCharacter() {
-    String s = getAsString();
-    if (s.isEmpty()) {
+    String stringValue = getAsString();
+    if (stringValue.isEmpty()) {
       throw new UnsupportedOperationException("String value is empty");
     } else {
-      return s.charAt(0);
+      return stringValue.charAt(0);
     }
   }
 

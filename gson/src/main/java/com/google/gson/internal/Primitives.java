@@ -25,7 +25,9 @@ import java.lang.reflect.Type;
  * @author Kevin Bourrillion
  */
 public final class Primitives {
-  private Primitives() {}
+  private Primitives() {
+    throw new UnsupportedOperationException();
+  }
 
   /** Returns true if this type is a primitive. */
   public static boolean isPrimitive(Type type) {

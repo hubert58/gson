@@ -23,6 +23,7 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.internal.bind.JsonElementTypeAdapter;
 import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
 import com.google.gson.stream.MalformedJsonException;
 import java.io.Closeable;
@@ -42,7 +43,7 @@ public final class Streams {
   public static JsonElement parse(JsonReader reader) throws JsonParseException {
     boolean isEmpty = true;
     try {
-      reader.peek();
+      JsonToken unused = reader.peek();
       isEmpty = false;
       return JsonElementTypeAdapter.ADAPTER.read(reader);
     } catch (EOFException e) {
@@ -107,15 +108,15 @@ public final class Streams {
     // They would otherwise unnecessarily create Strings or char arrays
 
     @Override
-    public void write(int i) throws IOException {
-      appendable.append((char) i);
+    public void write(int charValue) throws IOException {
+      appendable.append((char) charValue);
     }
 
     @Override
-    public void write(String str, int off, int len) throws IOException {
+    public void write(String str, int offset, int length) throws IOException {
       // Appendable.append turns null -> "null", which is not desired here
       Objects.requireNonNull(str);
-      appendable.append(str, off, off + len);
+      appendable.append(str, offset, offset + length);
     }
 
     @Override
