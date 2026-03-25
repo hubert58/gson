@@ -29,6 +29,7 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -46,6 +47,7 @@ public final class ConstructorConstructor {
   private final Map<Type, InstanceCreator<?>> instanceCreators;
   private final boolean useJdkUnsafe;
   private final List<ReflectionAccessFilter> reflectionFilters;
+  private final List<CreationStrategy> strategies;
 
   public ConstructorConstructor(
       Map<Type, InstanceCreator<?>> instanceCreators,
@@ -54,6 +56,17 @@ public final class ConstructorConstructor {
     this.instanceCreators = instanceCreators;
     this.useJdkUnsafe = useJdkUnsafe;
     this.reflectionFilters = reflectionFilters;
+    this.strategies =
+        Arrays.asList(
+            new RegisteredInstanceCreatorStrategy(),
+            new SpecialCollectionStrategy(),
+            new DefaultConstructorStrategy(),
+            new DefaultImplementationStrategy(),
+            new UnsafeAllocatorStrategy());
+  }
+
+  private interface CreationStrategy {
+    <T> ObjectConstructor<T> tryCreate(TypeToken<T> typeToken, boolean allowUnsafe);
   }
 
   /**
@@ -101,73 +114,95 @@ public final class ConstructorConstructor {
    *     is false
    */
   public <T> ObjectConstructor<T> get(TypeToken<T> typeToken, boolean allowUnsafe) {
-    Type type = typeToken.getType();
-    Class<? super T> rawType = typeToken.getRawType();
-
-    // first try an instance creator
-
-    @SuppressWarnings("unchecked") // types must agree
-    InstanceCreator<T> typeCreator = (InstanceCreator<T>) instanceCreators.get(type);
-    if (typeCreator != null) {
-      return new InstanceCreatorConstructor<>(typeCreator, type);
+    for (CreationStrategy strategy : strategies) {
+      ObjectConstructor<T> constructor = strategy.tryCreate(typeToken, allowUnsafe);
+      if (constructor != null) {
+        return constructor;
+      }
     }
 
-    // Next try raw type match for instance creators
-    @SuppressWarnings("unchecked") // types must agree
-    InstanceCreator<T> rawTypeCreator = (InstanceCreator<T>) instanceCreators.get(rawType);
-    if (rawTypeCreator != null) {
-      return new InstanceCreatorConstructor<>(rawTypeCreator, type);
-    }
+    // This should technically never be reached as UnsafeAllocatorStrategy is the last resort
+    throw new IllegalStateException("Unable to create instance of " + typeToken.getRawType());
+  }
 
-    // First consider special constructors before checking for no-args constructors
-    // below to avoid matching internal no-args constructors which might be added in
-    // future JDK versions
-    ObjectConstructor<T> specialConstructor = newSpecialCollectionConstructor(type, rawType);
-    if (specialConstructor != null) {
-      return specialConstructor;
-    }
+  private final class RegisteredInstanceCreatorStrategy implements CreationStrategy {
+    @Override
+    public <T> ObjectConstructor<T> tryCreate(TypeToken<T> typeToken, boolean allowUnsafe) {
+      Type type = typeToken.getType();
+      Class<? super T> rawType = typeToken.getRawType();
 
-    FilterResult filterResult =
-        ReflectionAccessFilterHelper.getFilterResult(reflectionFilters, rawType);
-    ObjectConstructor<T> defaultConstructor = newDefaultConstructor(rawType, filterResult);
-    if (defaultConstructor != null) {
-      return defaultConstructor;
-    }
+      @SuppressWarnings("unchecked")
+      InstanceCreator<T> typeCreator = (InstanceCreator<T>) instanceCreators.get(type);
+      if (typeCreator != null) {
+        return new InstanceCreatorConstructor<>(typeCreator, type);
+      }
 
-    ObjectConstructor<T> defaultImplementation = newDefaultImplementationConstructor(type, rawType);
-    if (defaultImplementation != null) {
-      return defaultImplementation;
+      @SuppressWarnings("unchecked")
+      InstanceCreator<T> rawTypeCreator = (InstanceCreator<T>) instanceCreators.get(rawType);
+      if (rawTypeCreator != null) {
+        return new InstanceCreatorConstructor<>(rawTypeCreator, type);
+      }
+      return null;
     }
+  }
 
-    // Check whether type is instantiable; otherwise ReflectionAccessFilter recommendation
-    // of adjusting filter suggested below is irrelevant since it would not solve the problem
-    String exceptionMessage = checkInstantiable(rawType);
-    if (exceptionMessage != null) {
-      return new ThrowingObjectConstructor<>(exceptionMessage);
+  private static final class SpecialCollectionStrategy implements CreationStrategy {
+    @Override
+    public <T> ObjectConstructor<T> tryCreate(TypeToken<T> typeToken, boolean allowUnsafe) {
+      return newSpecialCollectionConstructor(typeToken.getType(), typeToken.getRawType());
     }
+  }
 
-    if (!allowUnsafe) {
-      String message =
-          "Unable to create instance of "
-              + rawType
-              + "; Register an InstanceCreator or a TypeAdapter for this type.";
-      return new ThrowingObjectConstructor<>(message);
+  private final class DefaultConstructorStrategy implements CreationStrategy {
+    @Override
+    public <T> ObjectConstructor<T> tryCreate(TypeToken<T> typeToken, boolean allowUnsafe) {
+      Class<? super T> rawType = typeToken.getRawType();
+      FilterResult filterResult =
+          ReflectionAccessFilterHelper.getFilterResult(reflectionFilters, rawType);
+      return newDefaultConstructor(rawType, filterResult);
     }
+  }
 
-    // Consider usage of Unsafe as reflection, so don't use if BLOCK_ALL
-    // Additionally, since it is not calling any constructor at all, don't use if BLOCK_INACCESSIBLE
-    if (filterResult != FilterResult.ALLOW) {
-      String message =
-          "Unable to create instance of "
-              + rawType
-              + "; ReflectionAccessFilter does not permit using reflection or Unsafe. Register an"
-              + " InstanceCreator or a TypeAdapter for this type or adjust the access filter to"
-              + " allow using reflection.";
-      return new ThrowingObjectConstructor<>(message);
+  private static final class DefaultImplementationStrategy implements CreationStrategy {
+    @Override
+    public <T> ObjectConstructor<T> tryCreate(TypeToken<T> typeToken, boolean allowUnsafe) {
+      return newDefaultImplementationConstructor(typeToken.getType(), typeToken.getRawType());
     }
+  }
 
-    // finally try unsafe
-    return newUnsafeAllocator(rawType);
+  private final class UnsafeAllocatorStrategy implements CreationStrategy {
+    @Override
+    public <T> ObjectConstructor<T> tryCreate(TypeToken<T> typeToken, boolean allowUnsafe) {
+      Class<? super T> rawType = typeToken.getRawType();
+
+      // Check whether type is instantiable
+      String exceptionMessage = checkInstantiable(rawType);
+      if (exceptionMessage != null) {
+        return new ThrowingObjectConstructor<>(exceptionMessage);
+      }
+
+      if (!allowUnsafe) {
+        String message =
+            "Unable to create instance of "
+                + rawType
+                + "; Register an InstanceCreator or a TypeAdapter for this type.";
+        return new ThrowingObjectConstructor<>(message);
+      }
+
+      FilterResult filterResult =
+          ReflectionAccessFilterHelper.getFilterResult(reflectionFilters, rawType);
+      if (filterResult != FilterResult.ALLOW) {
+        String message =
+            "Unable to create instance of "
+                + rawType
+                + "; ReflectionAccessFilter does not permit using reflection or Unsafe. Register"
+                + " an InstanceCreator or a TypeAdapter for this type or adjust the access filter"
+                + " to allow using reflection.";
+        return new ThrowingObjectConstructor<>(message);
+      }
+
+      return newUnsafeAllocator(rawType);
+    }
   }
 
   /**
