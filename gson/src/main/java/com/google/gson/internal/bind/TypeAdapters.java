@@ -18,12 +18,10 @@ package com.google.gson.internal.bind;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonIOException;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.TypeAdapter;
 import com.google.gson.TypeAdapterFactory;
 import com.google.gson.internal.LazilyParsedNumber;
-import com.google.gson.internal.NumberLimits;
 import com.google.gson.internal.TroubleshootingGuide;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
@@ -34,7 +32,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -572,80 +569,21 @@ public final class TypeAdapters {
         }
       };
 
-  public static final TypeAdapter<BigDecimal> BIG_DECIMAL =
-      new TypeAdapter<BigDecimal>() {
-        @Override
-        public BigDecimal read(JsonReader in) throws IOException {
-          if (in.peek() == JsonToken.NULL) {
-            in.nextNull();
-            return null;
-          }
-          String s = in.nextString();
-          try {
-            return NumberLimits.parseBigDecimal(s);
-          } catch (NumberFormatException e) {
-            throw new JsonSyntaxException(
-                "Failed parsing '" + s + "' as BigDecimal; at path " + in.getPreviousPath(), e);
-          }
-        }
-
-        @Override
-        public void write(JsonWriter out, BigDecimal value) throws IOException {
-          out.value(value);
-        }
-      };
+  public static final TypeAdapter<BigDecimal> BIG_DECIMAL = NumericTypeAdapters.BIG_DECIMAL;
 
   public static final TypeAdapterFactory BIG_DECIMAL_FACTORY =
-      newFactory(BigDecimal.class, BIG_DECIMAL);
+      NumericTypeAdapters.BIG_DECIMAL_FACTORY;
 
-  public static final TypeAdapter<BigInteger> BIG_INTEGER =
-      new TypeAdapter<BigInteger>() {
-        @Override
-        public BigInteger read(JsonReader in) throws IOException {
-          if (in.peek() == JsonToken.NULL) {
-            in.nextNull();
-            return null;
-          }
-          String s = in.nextString();
-          try {
-            return NumberLimits.parseBigInteger(s);
-          } catch (NumberFormatException e) {
-            throw new JsonSyntaxException(
-                "Failed parsing '" + s + "' as BigInteger; at path " + in.getPreviousPath(), e);
-          }
-        }
-
-        @Override
-        public void write(JsonWriter out, BigInteger value) throws IOException {
-          out.value(value);
-        }
-      };
+  public static final TypeAdapter<BigInteger> BIG_INTEGER = NumericTypeAdapters.BIG_INTEGER;
 
   public static final TypeAdapterFactory BIG_INTEGER_FACTORY =
-      newFactory(BigInteger.class, BIG_INTEGER);
+      NumericTypeAdapters.BIG_INTEGER_FACTORY;
 
   public static final TypeAdapter<LazilyParsedNumber> LAZILY_PARSED_NUMBER =
-      new TypeAdapter<LazilyParsedNumber>() {
-        // Normally users should not be able to access and deserialize LazilyParsedNumber because
-        // it is an internal type, but implement this nonetheless in case there are legit corner
-        // cases where this is possible
-        @Override
-        public LazilyParsedNumber read(JsonReader in) throws IOException {
-          if (in.peek() == JsonToken.NULL) {
-            in.nextNull();
-            return null;
-          }
-          return new LazilyParsedNumber(in.nextString());
-        }
-
-        @Override
-        public void write(JsonWriter out, LazilyParsedNumber value) throws IOException {
-          out.value(value);
-        }
-      };
+      NumericTypeAdapters.LAZILY_PARSED_NUMBER;
 
   public static final TypeAdapterFactory LAZILY_PARSED_NUMBER_FACTORY =
-      newFactory(LazilyParsedNumber.class, LAZILY_PARSED_NUMBER);
+      NumericTypeAdapters.LAZILY_PARSED_NUMBER_FACTORY;
 
   public static final TypeAdapterFactory STRING_FACTORY = newFactory(String.class, STRING);
 
@@ -689,99 +627,22 @@ public final class TypeAdapters {
   public static final TypeAdapterFactory STRING_BUFFER_FACTORY =
       newFactory(StringBuffer.class, STRING_BUFFER);
 
-  public static final TypeAdapter<URL> URL =
-      new TypeAdapter<URL>() {
-        @Override
-        public URL read(JsonReader in) throws IOException {
-          if (in.peek() == JsonToken.NULL) {
-            in.nextNull();
-            return null;
-          }
-          String nextString = in.nextString();
-          return nextString.equals("null") ? null : new URL(nextString);
-        }
+  public static final TypeAdapter<URL> URL = NetworkTypeAdapters.URL;
 
-        @Override
-        public void write(JsonWriter out, URL value) throws IOException {
-          out.value(value == null ? null : value.toExternalForm());
-        }
-      };
+  public static final TypeAdapterFactory URL_FACTORY = NetworkTypeAdapters.URL_FACTORY;
 
-  public static final TypeAdapterFactory URL_FACTORY = newFactory(URL.class, URL);
+  public static final TypeAdapter<URI> URI = NetworkTypeAdapters.URI;
 
-  public static final TypeAdapter<URI> URI =
-      new TypeAdapter<URI>() {
-        @Override
-        public URI read(JsonReader in) throws IOException {
-          if (in.peek() == JsonToken.NULL) {
-            in.nextNull();
-            return null;
-          }
-          try {
-            String nextString = in.nextString();
-            return nextString.equals("null") ? null : new URI(nextString);
-          } catch (URISyntaxException e) {
-            throw new JsonIOException(e);
-          }
-        }
+  public static final TypeAdapterFactory URI_FACTORY = NetworkTypeAdapters.URI_FACTORY;
 
-        @Override
-        public void write(JsonWriter out, URI value) throws IOException {
-          out.value(value == null ? null : value.toASCIIString());
-        }
-      };
-
-  public static final TypeAdapterFactory URI_FACTORY = newFactory(URI.class, URI);
-
-  public static final TypeAdapter<InetAddress> INET_ADDRESS =
-      new TypeAdapter<InetAddress>() {
-        @Override
-        public InetAddress read(JsonReader in) throws IOException {
-          if (in.peek() == JsonToken.NULL) {
-            in.nextNull();
-            return null;
-          }
-          // regrettably, this should have included both the host name and the host address
-          // For compatibility, we use InetAddress.getByName rather than the possibly-better
-          // .getAllByName
-          @SuppressWarnings("AddressSelection")
-          InetAddress addr = InetAddress.getByName(in.nextString());
-          return addr;
-        }
-
-        @Override
-        public void write(JsonWriter out, InetAddress value) throws IOException {
-          out.value(value == null ? null : value.getHostAddress());
-        }
-      };
+  public static final TypeAdapter<InetAddress> INET_ADDRESS = NetworkTypeAdapters.INET_ADDRESS;
 
   public static final TypeAdapterFactory INET_ADDRESS_FACTORY =
-      newTypeHierarchyFactory(InetAddress.class, INET_ADDRESS);
+      NetworkTypeAdapters.INET_ADDRESS_FACTORY;
 
-  public static final TypeAdapter<UUID> UUID =
-      new TypeAdapter<UUID>() {
-        @Override
-        public UUID read(JsonReader in) throws IOException {
-          if (in.peek() == JsonToken.NULL) {
-            in.nextNull();
-            return null;
-          }
-          String s = in.nextString();
-          try {
-            return java.util.UUID.fromString(s);
-          } catch (IllegalArgumentException e) {
-            throw new JsonSyntaxException(
-                "Failed parsing '" + s + "' as UUID; at path " + in.getPreviousPath(), e);
-          }
-        }
+  public static final TypeAdapter<UUID> UUID = NetworkTypeAdapters.UUID;
 
-        @Override
-        public void write(JsonWriter out, UUID value) throws IOException {
-          out.value(value == null ? null : value.toString());
-        }
-      };
-
-  public static final TypeAdapterFactory UUID_FACTORY = newFactory(UUID.class, UUID);
+  public static final TypeAdapterFactory UUID_FACTORY = NetworkTypeAdapters.UUID_FACTORY;
 
   public static final TypeAdapter<Currency> CURRENCY =
       new TypeAdapter<Currency>() {

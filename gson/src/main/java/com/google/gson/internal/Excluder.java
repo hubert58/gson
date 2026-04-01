@@ -17,14 +17,12 @@
 package com.google.gson.internal;
 
 import com.google.gson.ExclusionStrategy;
-import com.google.gson.FieldAttributes;
 import com.google.gson.Gson;
 import com.google.gson.TypeAdapter;
 import com.google.gson.TypeAdapterFactory;
 import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.Since;
 import com.google.gson.annotations.Until;
-import com.google.gson.internal.reflect.ReflectionHelper;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
@@ -43,6 +41,9 @@ import java.util.List;
  * <p>This class is a type adapter factory; types that are excluded will be adapted to null. It may
  * delegate to another type adapter if only one direction is excluded.
  *
+ * <p>The exclusion decision logic itself is delegated to {@link ExclusionRules}, which encapsulates
+ * the filtering rules independently from the TypeAdapterFactory plumbing.
+ *
  * @author Joel Leitch
  * @author Jesse Wilson
  */
@@ -57,13 +58,38 @@ public final class Excluder implements TypeAdapterFactory, Cloneable {
   private List<ExclusionStrategy> serializationStrategies = Collections.emptyList();
   private List<ExclusionStrategy> deserializationStrategies = Collections.emptyList();
 
+  /** Lazily created exclusion rules instance; invalidated on clone. */
+  private transient ExclusionRules exclusionRules;
+
   @Override
   protected Excluder clone() {
     try {
-      return (Excluder) super.clone();
+      Excluder result = (Excluder) super.clone();
+      result.exclusionRules = null; // Invalidate cached rules
+      return result;
     } catch (CloneNotSupportedException e) {
       throw new AssertionError(e);
     }
+  }
+
+  /**
+   * Returns the {@link ExclusionRules} instance containing the exclusion decision logic. The
+   * instance is lazily created and cached.
+   */
+  private ExclusionRules getExclusionRules() {
+    ExclusionRules rules = this.exclusionRules;
+    if (rules == null) {
+      rules =
+          new ExclusionRules(
+              version,
+              modifiers,
+              serializeInnerClasses,
+              requireExpose,
+              serializationStrategies,
+              deserializationStrategies);
+      this.exclusionRules = rules;
+    }
+    return rules;
   }
 
   public Excluder withVersion(double ignoreVersionsAfter) {
@@ -156,102 +182,12 @@ public final class Excluder implements TypeAdapterFactory, Cloneable {
   }
 
   public boolean excludeField(Field field, boolean serialize) {
-    if ((modifiers & field.getModifiers()) != 0) {
-      return true;
-    }
-
-    if (version != Excluder.IGNORE_VERSIONS
-        && !isValidVersion(field.getAnnotation(Since.class), field.getAnnotation(Until.class))) {
-      return true;
-    }
-
-    if (field.isSynthetic()) {
-      return true;
-    }
-
-    if (requireExpose) {
-      Expose annotation = field.getAnnotation(Expose.class);
-      if (annotation == null || (serialize ? !annotation.serialize() : !annotation.deserialize())) {
-        return true;
-      }
-    }
-
-    if (excludeClass(field.getType(), serialize)) {
-      return true;
-    }
-
-    List<ExclusionStrategy> list = serialize ? serializationStrategies : deserializationStrategies;
-    if (!list.isEmpty()) {
-      FieldAttributes fieldAttributes = new FieldAttributes(field);
-      for (ExclusionStrategy exclusionStrategy : list) {
-        if (exclusionStrategy.shouldSkipField(fieldAttributes)) {
-          return true;
-        }
-      }
-    }
-
-    return false;
+    return getExclusionRules().shouldExcludeField(field, serialize);
   }
 
   // public for unit tests; can otherwise be private
   public boolean excludeClass(Class<?> clazz, boolean serialize) {
-    if (version != Excluder.IGNORE_VERSIONS
-        && !isValidVersion(clazz.getAnnotation(Since.class), clazz.getAnnotation(Until.class))) {
-      return true;
-    }
-
-    if (!serializeInnerClasses && isInnerClass(clazz)) {
-      return true;
-    }
-
-    /*
-     * Exclude anonymous and local classes because they can have synthetic fields capturing enclosing
-     * values which makes serialization and deserialization unreliable.
-     * Don't exclude anonymous enum subclasses because enum types have a built-in adapter.
-     *
-     * Exclude only for deserialization; for serialization allow because custom adapter might be
-     * used; if no custom adapter exists reflection-based adapter otherwise excludes value.
-     *
-     * Cannot allow deserialization reliably here because some custom adapters like Collection adapter
-     * fall back to creating instances using Unsafe, which would likely lead to runtime exceptions
-     * for anonymous and local classes if they capture values.
-     */
-    if (!serialize
-        && !Enum.class.isAssignableFrom(clazz)
-        && ReflectionHelper.isAnonymousOrNonStaticLocal(clazz)) {
-      return true;
-    }
-
-    List<ExclusionStrategy> list = serialize ? serializationStrategies : deserializationStrategies;
-    for (ExclusionStrategy exclusionStrategy : list) {
-      if (exclusionStrategy.shouldSkipClass(clazz)) {
-        return true;
-      }
-    }
-    return false;
+    return getExclusionRules().shouldExcludeClass(clazz, serialize);
   }
 
-  private static boolean isInnerClass(Class<?> clazz) {
-    return clazz.isMemberClass() && !ReflectionHelper.isStatic(clazz);
-  }
-
-  private boolean isValidVersion(Since since, Until until) {
-    return isValidSince(since) && isValidUntil(until);
-  }
-
-  private boolean isValidSince(Since annotation) {
-    if (annotation != null) {
-      double annotationVersion = annotation.value();
-      return version >= annotationVersion;
-    }
-    return true;
-  }
-
-  private boolean isValidUntil(Until annotation) {
-    if (annotation != null) {
-      double annotationVersion = annotation.value();
-      return version < annotationVersion;
-    }
-    return true;
-  }
 }

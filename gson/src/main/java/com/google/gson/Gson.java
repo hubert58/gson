@@ -22,6 +22,8 @@ import com.google.gson.annotations.JsonAdapter;
 import com.google.gson.internal.ConstructorConstructor;
 import com.google.gson.internal.Excluder;
 import com.google.gson.internal.GsonBuildConfig;
+import com.google.gson.internal.JsonReaderConfigurator;
+import com.google.gson.internal.JsonWriterConfigurator;
 import com.google.gson.internal.Primitives;
 import com.google.gson.internal.Streams;
 import com.google.gson.internal.bind.JsonAdapterAnnotationTypeAdapterFactory;
@@ -648,19 +650,8 @@ public final class Gson {
     @SuppressWarnings("unchecked")
     TypeAdapter<Object> adapter = (TypeAdapter<Object>) getAdapter(TypeToken.get(typeOfSrc));
 
-    Strictness oldStrictness = writer.getStrictness();
-    if (this.strictness != null) {
-      writer.setStrictness(this.strictness);
-    } else if (writer.getStrictness() == Strictness.LEGACY_STRICT) {
-      // For backward compatibility change to LENIENT if writer has default strictness LEGACY_STRICT
-      writer.setStrictness(Strictness.LENIENT);
-    }
-
-    boolean oldHtmlSafe = writer.isHtmlSafe();
-    boolean oldSerializeNulls = writer.getSerializeNulls();
-
-    writer.setHtmlSafe(htmlSafe);
-    writer.setSerializeNulls(serializeNulls);
+    JsonWriterConfigurator configurator =
+        new JsonWriterConfigurator(writer, strictness, htmlSafe, serializeNulls);
     try {
       adapter.write(writer, src);
     } catch (IOException e) {
@@ -669,9 +660,7 @@ public final class Gson {
       throw new AssertionError(
           "AssertionError (GSON " + GsonBuildConfig.VERSION + "): " + e.getMessage(), e);
     } finally {
-      writer.setStrictness(oldStrictness);
-      writer.setHtmlSafe(oldHtmlSafe);
-      writer.setSerializeNulls(oldSerializeNulls);
+      configurator.restore();
     }
   }
 
@@ -726,20 +715,8 @@ public final class Gson {
    * @throws JsonIOException if there was a problem writing to the writer
    */
   public void toJson(JsonElement jsonElement, JsonWriter writer) throws JsonIOException {
-    Strictness oldStrictness = writer.getStrictness();
-    boolean oldHtmlSafe = writer.isHtmlSafe();
-    boolean oldSerializeNulls = writer.getSerializeNulls();
-
-    writer.setHtmlSafe(htmlSafe);
-    writer.setSerializeNulls(serializeNulls);
-
-    if (this.strictness != null) {
-      writer.setStrictness(this.strictness);
-    } else if (writer.getStrictness() == Strictness.LEGACY_STRICT) {
-      // For backward compatibility change to LENIENT if writer has default strictness LEGACY_STRICT
-      writer.setStrictness(Strictness.LENIENT);
-    }
-
+    JsonWriterConfigurator configurator =
+        new JsonWriterConfigurator(writer, strictness, htmlSafe, serializeNulls);
     try {
       Streams.write(jsonElement, writer);
     } catch (IOException e) {
@@ -748,9 +725,7 @@ public final class Gson {
       throw new AssertionError(
           "AssertionError (GSON " + GsonBuildConfig.VERSION + "): " + e.getMessage(), e);
     } finally {
-      writer.setStrictness(oldStrictness);
-      writer.setHtmlSafe(oldHtmlSafe);
-      writer.setSerializeNulls(oldSerializeNulls);
+      configurator.restore();
     }
   }
 
@@ -1064,15 +1039,8 @@ public final class Gson {
   public <T> T fromJson(JsonReader reader, TypeToken<T> typeOfT)
       throws JsonIOException, JsonSyntaxException {
     boolean isEmpty = true;
-    Strictness oldStrictness = reader.getStrictness();
 
-    if (this.strictness != null) {
-      reader.setStrictness(this.strictness);
-    } else if (reader.getStrictness() == Strictness.LEGACY_STRICT) {
-      // For backward compatibility change to LENIENT if reader has default strictness LEGACY_STRICT
-      reader.setStrictness(Strictness.LENIENT);
-    }
-
+    JsonReaderConfigurator configurator = new JsonReaderConfigurator(reader, strictness);
     try {
       JsonToken unused = reader.peek();
       isEmpty = false;
@@ -1108,7 +1076,7 @@ public final class Gson {
       throw new AssertionError(
           "AssertionError (GSON " + GsonBuildConfig.VERSION + "): " + e.getMessage(), e);
     } finally {
-      reader.setStrictness(oldStrictness);
+      configurator.restore();
     }
   }
 
